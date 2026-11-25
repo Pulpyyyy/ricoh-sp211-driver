@@ -115,6 +115,8 @@ driver's output (`src/dither_matrix.h`).
   installer, the apps and the disk image
 - `research/`: the Python scripts used to decode the format (they need Ricoh's original driver and
   Rosetta; kept as documentation)
+- `tools/ricoh_gdi_status.py`: reads the printer's status directly over USB (needs Python 3 and
+  libusb-1.0); its tests: `python3 tests/test_gdi_status.py`
 - `tests/`: saved rasters and the exact output of the original driver, for tests that also run
   without Rosetta
 
@@ -253,6 +255,8 @@ din ieșirea driverului original (`src/dither_matrix.h`).
   `.pkg`, aplicațiile și imaginea DMG
 - `research/`: scripturile Python folosite la descifrarea formatului (au nevoie de driverul Ricoh
   original și de Rosetta; sunt păstrate ca documentație).
+- `tools/ricoh_gdi_status.py`: citește starea imprimantei direct prin USB (necesită Python 3 și
+  libusb-1.0); testele lui: `python3 tests/test_gdi_status.py`
 - `tests/`: rastere salvate și rezultatele exacte ale driverului original, pentru teste
   care funcționează și fără Rosetta.
 
