@@ -94,6 +94,7 @@ Back to Ricoh's driver: `sudo ./uninstall.sh`
 - All paper sizes in the PPD, 600 dpi and 1200×600 dpi
 - Toner Save, Media Type, Input Slot, manual duplex (even pages first, then odd pages)
 - Number of copies, job title and user name (shown by the printer)
+- Options a job does not set (paper size, tray, ...) are taken from the queue's defaults
 
 The hidden options `PBrightness` / `PContrast` (not in the PPD and not in the macOS print dialog)
 are not implemented.
@@ -232,6 +233,8 @@ Revenire la driverul Ricoh: `sudo ./uninstall.sh`
 - Toate formatele de hârtie din PPD, 600 dpi și 1200×600 dpi
 - Toner Save, Media Type, Input Slot, Duplex manual (paginile pare întâi, apoi cele impare)
 - Numărul de copii, titlul și utilizatorul (afișate de imprimantă)
+- Opțiunile pe care o lucrare nu le setează (formatul hârtiei, tava, ...) sunt luate din valorile
+  implicite ale cozii
 
 Opțiunile ascunse `PBrightness` / `PContrast` (nu apar în PPD și nici în dialogul de tipărire
 din macOS) nu sunt implementate.

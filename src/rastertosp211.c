@@ -10,9 +10,13 @@
  * in lilo2.c and is shared with the AirPrint server.
  *
  * Usage (as a CUPS filter): rastertosp211 job user title copies options [file]
+ *
+ * MODIFIED (GPL v2 section 2a notice):
+ * 2026-11-25: options the job does not set are taken from the queue's PPD.
  */
 
 #include <cups/cups.h>
+#include <cups/ppd.h>
 #include <cups/raster.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -36,6 +40,20 @@ static void write_all(const void *p, size_t n) {
 
 /* the original filter only accepts "true" (any case) */
 static int is_true(const char *v) { return v && !strcasecmp(v, "true"); }
+
+/* Value of a PPD option for this job: what the job asked for, otherwise the
+ * queue default from the PPD. CUPS only passes the options a client set, so
+ * a plain "lp file" carries no PageSize or InputSlot; without the PPD default
+ * the stream says "paper unspecified" and a printer loaded with A4 holds the
+ * job until Start is pressed. NULL if neither is known. */
+static const char *job_option(ppd_file_t *ppd, const char *name,
+                              int num_options, cups_option_t *options) {
+  if (ppd) {
+    ppd_choice_t *c = ppdFindMarkedChoice(ppd, name);
+    if (c) return c->choice;
+  }
+  return cupsGetOption(name, num_options, options);
+}
 
 typedef struct {
   int paper, tray, media, toner_save;
@@ -100,18 +118,26 @@ int main(int argc, char *argv[]) {
   int num_options = cupsParseOptions(argv[5], 0, &options);
   const char *v;
 
+  /* The queue's PPD (CUPS sets $PPD for filters): its defaults, overridden
+   * by the job's options. cupsMarkOptions also maps "media=A4" to PageSize. */
+  ppd_file_t *ppd = getenv("PPD") ? ppdOpenFile(getenv("PPD")) : NULL;
+  if (ppd) {
+    ppdMarkDefaults(ppd);
+    cupsMarkOptions(ppd, num_options, options);
+  }
+
   job_opts_t jo;
-  v = cupsGetOption("PageSize", num_options, options);
+  v = job_option(ppd, "PageSize", num_options, options);
   if (!v) v = cupsGetOption("media", num_options, options);
   jo.paper = v ? lilo2_paper_code(v) : LILO2_PAPER_UNSPECIFIED;
-  jo.media = lilo2_media_code(cupsGetOption("MediaType", num_options, options));
-  jo.tray = lilo2_tray_code(cupsGetOption("InputSlot", num_options, options));
-  jo.toner_save = is_true(cupsGetOption("TonerSave", num_options, options));
+  jo.media = lilo2_media_code(job_option(ppd, "MediaType", num_options, options));
+  jo.tray = lilo2_tray_code(job_option(ppd, "InputSlot", num_options, options));
+  jo.toner_save = is_true(job_option(ppd, "TonerSave", num_options, options));
 
   lilo2_job job = {0};
   job.toner_save = jo.toner_save;
-  job.edge_smoothing = is_true(cupsGetOption("EdgeSmoothing", num_options, options));
-  v = cupsGetOption("Duplex", num_options, options);
+  job.edge_smoothing = is_true(job_option(ppd, "EdgeSmoothing", num_options, options));
+  v = job_option(ppd, "Duplex", num_options, options);
   int duplex = v && (!strcmp(v, "DuplexNoTumble") || !strcmp(v, "DuplexTumble")) &&
                lilo2_duplex_allowed(jo.paper);
   int tumble = v && !strcmp(v, "DuplexTumble");
