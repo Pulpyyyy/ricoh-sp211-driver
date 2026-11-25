@@ -15,8 +15,8 @@
  * 2026-11-25: options the job does not set are taken from the queue's PPD;
  * the printer's status packets are read from the CUPS back-channel and
  * reported to CUPS (toner, out of paper); the filter stays until the printer
- * has finished the job; the printer's page and misfeed counters are read
- * over USB and reported, with the number of pages actually printed.
+ * has finished the job; the printer's page counter is read over USB before
+ * and after the job, which gives the number of pages actually printed.
  */
 
 #include <cups/backend.h>
@@ -105,8 +105,8 @@ static int status_poll(double timeout) {
 
 /* All data is sent: stay until the printer has finished the job, so that a
  * paper error keeps the CUPS job (and its state) visible and the counter
- * read at the end is final. Then hand the counters and the number of pages
- * that really came out to CUPS. */
+ * read at the end is final. Then hand the number of pages that really came
+ * out to CUPS. */
 static void status_wait_for_printer(void) {
   if (!status_enabled) return;
   double start = now_seconds(), last_data = start, next_probe = 0;
@@ -135,7 +135,7 @@ static void status_wait_for_printer(void) {
   }
 
   sp211_counters after;
-  if (sp211_usb_read_counters(getenv("DEVICE_URI"), 1, &after)) {
+  if (sp211_usb_read_counters(getenv("DEVICE_URI"), 0, &after)) {
     sp211_report_counters(&status_reporter, &after);
     if (counters_have_before)
       sp211_report_pages(&status_reporter, sp211_pages_printed(&counters_before, &after));

@@ -101,18 +101,18 @@ sudo lpadmin -p SP211 -E -v "$(lpinfo -v | grep -i 'usb://RICOH' | cut -d' ' -f2
 ```
 `make install-linux` copies the filter and the PPD to the CUPS directories; `lpadmin` then creates
 the queue `SP211` for the printer on USB. Without `libusb-1.0-0-dev` the filter still builds and
-prints; it then does not report the page and misfeed counters.
+prints; the page count of a job then does not come from the printer's counter.
 
 | Information | Where CUPS shows it | State |
 |---|---|---|
 | toner level | `marker-levels`, and `toner-low-warning` at 10 % or less | verified |
 | out of paper | `media-empty-error` | replayed packets only |
-| page counter and misfeeds | `marker-message`, e.g. `page-counter=193;misfeeds=6;misfeeds-tray1=6` | dry run only, not yet with a real job |
-| pages printed by a job | job accounting (`job-impressions-completed`) | dry run only, not yet with a real job |
+| pages printed by a job | job accounting (`job-impressions-completed`), from the printer's page counter read before and after the job | verified |
 
-Cover open and paper jams are not reported: the printer does not transmit them.
-`tools/ricoh_gdi_status.py` reads the printer directly. The protocol is described in
-`docs/STATUS_PROTOCOL.md`.
+Cover open and paper jams are not reported: the printer does not transmit them. The lifetime page
+counter and the misfeed counters are not published in CUPS, which lets a filter set no attribute
+for them; `tools/ricoh_gdi_status.py` reads them from the printer (`--json` for scripts). The
+protocol is described in `docs/STATUS_PROTOCOL.md`.
 
 ### What is supported
 - All paper sizes in the PPD, 600 dpi and 1200×600 dpi
