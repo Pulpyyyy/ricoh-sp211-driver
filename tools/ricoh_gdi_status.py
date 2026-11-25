@@ -467,23 +467,6 @@ LINGER_OK_SECONDS = 20      # how long to wait for the printer to start the job
 LINGER_SILENCE_SECONDS = 15  # stop waiting if the printer stops talking
 
 
-def counters_message(registers):
-    """Text for the CUPS marker-message attribute, e.g.
-    "page-counter=187;misfeeds=6;misfeeds-tray1=6". Empty if nothing is known.
-
-    CUPS has no attribute for a lifetime page counter; marker-message is the
-    only free-text field a filter can set, so the counters travel there in a
-    key=value form that is easy to parse.
-    """
-    parts = []
-    for key, label in (("page_counter", "page-counter"), ("misfeed_total", "misfeeds"),
-                       ("misfeed_tray1", "misfeeds-tray1")):
-        value = registers.get(key) if registers else None
-        if value is not None:
-            parts.append("%s=%d" % (label, value))
-    return ";".join(parts)
-
-
 def pages_printed(counter_before, counter_after):
     """Pages physically printed during a job, from the printer's own counter."""
     if counter_before is None or counter_after is None:
@@ -498,7 +481,6 @@ class CupsReporter:
     def __init__(self, out=sys.stderr):
         self.out = out
         self.toner = None
-        self.message = ""
         self.sent = None
         self.paper_out = None
         self.toner_low = None
@@ -508,14 +490,12 @@ class CupsReporter:
         self.out.flush()
 
     def _supplies(self):
-        if self.toner is None or (self.toner, self.message) == self.sent:
+        if self.toner is None or self.toner == self.sent:
             return
-        self.sent = (self.toner, self.message)
+        self.sent = self.toner
         line = ("ATTR: marker-colors=#000000 marker-names='Black Toner' "
                 "marker-types=toner marker-low-levels=%d marker-high-levels=100 "
                 "marker-levels=%d" % (TONER_LOW_PERCENT, self.toner))
-        if self.message:
-            line += " marker-message=%s" % self.message
         self._emit(line)
         low = self.toner <= TONER_LOW_PERCENT
         if low != self.toner_low:
@@ -537,14 +517,16 @@ class CupsReporter:
                 self._emit("INFO: Printing")
 
     def update_registers(self, registers):
-        """Counters (and toner, if not known yet) read from the registers."""
+        """Toner level from the registers, if no status packet gave one yet.
+
+        The page and misfeed counters are not sent to CUPS: a filter may only
+        set the marker-* and printer-alert attributes, and none of them is
+        meant for a counter. Read them with this command instead.
+        """
         if not registers:
             return
         if self.toner is None and registers.get("toner_black_percent") is not None:
             self.toner = registers["toner_black_percent"]
-        message = counters_message(registers)
-        if message:
-            self.message = message
         self._supplies()
 
     def pages(self, count):

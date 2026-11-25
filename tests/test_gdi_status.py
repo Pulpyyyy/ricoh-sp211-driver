@@ -207,30 +207,23 @@ class AccountingTest(unittest.TestCase):
     REGS = {"page_counter": 187, "misfeed_total": 6, "misfeed_tray1": 6,
             "toner_black_percent": 75, "firmware": "V1.06"}
 
-    def test_counters_message(self):
-        self.assertEqual(g.counters_message(self.REGS),
-                         "page-counter=187;misfeeds=6;misfeeds-tray1=6")
-        self.assertEqual(g.counters_message({"page_counter": 5}), "page-counter=5")
-        self.assertEqual(g.counters_message(None), "")
-        self.assertNotIn(" ", g.counters_message(self.REGS))
-
     def test_pages_printed(self):
         self.assertEqual(g.pages_printed(187, 190), 3)
         self.assertIsNone(g.pages_printed(187, 187))
         self.assertIsNone(g.pages_printed(None, 190))
         self.assertIsNone(g.pages_printed(190, 187))
 
-    def test_reporter_sends_counters_and_pages(self):
+    def test_reporter_sends_toner_and_pages(self):
         out = io.StringIO()
         r = g.CupsReporter(out)
         r.update_registers(self.REGS)
         first = out.getvalue()
         self.assertIn("marker-levels=75", first)
-        self.assertIn("marker-message=page-counter=187;misfeeds=6;misfeeds-tray1=6", first)
+        self.assertNotIn("marker-message", first)   # counters are not sent to CUPS
         r.update(g.decode_gdir(IDLE))          # same toner: no second ATTR line
         self.assertEqual(out.getvalue().count("ATTR:"), 1)
         r.update_registers(dict(self.REGS, page_counter=188))
-        self.assertIn("page-counter=188", out.getvalue())
+        self.assertEqual(out.getvalue().count("ATTR:"), 1)
         r.pages(1)
         self.assertTrue(out.getvalue().rstrip().endswith("PAGE: total 1"))
 
