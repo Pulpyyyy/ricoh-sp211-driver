@@ -3,8 +3,16 @@
 # Native (Apple Silicon + Intel) CUPS filter and AirPrint server for Ricoh SP 211 / SP 221 class printers
 JBIG    = third_party/jbigkit-2.2/libjbig
 CORE    = src/lilo2.c $(JBIG)/jbig.c $(JBIG)/jbig_ar.c
-CFLAGS  = -O2 -Wall -Wno-deprecated-declarations -Isrc -I$(JBIG) -arch arm64 -arch x86_64 -mmacosx-version-min=12.0
+# macOS: universal binary, CUPS from the system.
+# Linux: needs the CUPS development files (Debian/Ubuntu: libcups2-dev).
+ifeq ($(shell uname -s),Darwin)
+ARCH    = -arch arm64 -arch x86_64 -mmacosx-version-min=12.0
 LDLIBS  = -lcups
+else
+CUPSFLAGS = $(shell cups-config --cflags 2>/dev/null)
+LDLIBS  = $(shell cups-config --libs 2>/dev/null || echo -lcups)
+endif
+CFLAGS  = -O2 -Wall -Wno-deprecated-declarations -Isrc -I$(JBIG) $(ARCH) $(CUPSFLAGS)
 
 build/rastertosp211: src/rastertosp211.c src/lilo2.h src/dither_matrix.h $(CORE)
 	mkdir -p build
@@ -15,6 +23,18 @@ clean:
 
 dmg:
 	./packaging/build.sh
+
+# Linux: installs the filter and the PPD where CUPS looks for them. The PPD in ppd/ names the
+# filter by its macOS path; the installed copy names it alone, and CUPS finds it in its filter
+# directory. On macOS use install.sh or the disk image instead.
+CUPS_SERVERBIN ?= $(shell cups-config --serverbin 2>/dev/null || echo /usr/lib/cups)
+CUPS_DATADIR   ?= $(shell cups-config --datadir 2>/dev/null || echo /usr/share/cups)
+install-linux: build/rastertosp211
+	install -d $(DESTDIR)$(CUPS_SERVERBIN)/filter $(DESTDIR)$(CUPS_DATADIR)/model
+	install -m 755 build/rastertosp211 $(DESTDIR)$(CUPS_SERVERBIN)/filter/rastertosp211
+	sed 's|/Library/Printers/SP211Native/Filters/rastertosp211|rastertosp211|' ppd/RICOH-SP-211-native.ppd > $(DESTDIR)$(CUPS_DATADIR)/model/ricoh-sp211.ppd
+	chmod 644 $(DESTDIR)$(CUPS_DATADIR)/model/ricoh-sp211.ppd
+.PHONY: install-linux
 
 # AirPrint server: native build (for local testing) and static OpenWrt/aarch64 build (needs zig)
 build/sp211-airprintd: src/airprintd.c src/icon_png.h src/lilo2.h $(CORE)

@@ -90,6 +90,17 @@ switches the printer queue to the new filter. The driver also shows up as
 
 Back to Ricoh's driver: `sudo ./uninstall.sh`
 
+### Linux
+The same filter builds on Linux (Debian or Ubuntu shown):
+```bash
+sudo apt install build-essential libcups2-dev
+make
+sudo make install-linux
+sudo lpadmin -p SP211 -E -v "$(lpinfo -v | grep -i 'usb://RICOH' | cut -d' ' -f2)" -P /usr/share/cups/model/ricoh-sp211.ppd
+```
+`make install-linux` copies the filter and the PPD to the CUPS directories; `lpadmin` then creates
+the queue `SP211` for the printer on USB.
+
 ### What is supported
 - All paper sizes in the PPD, 600 dpi and 1200×600 dpi
 - Toner Save, Media Type, Input Slot, manual duplex (even pages first, then odd pages)
@@ -227,6 +238,9 @@ setează coada imprimantei să folosească filtrul nou. Driverul apare și ca
 „RICOH SP 221, 1.01 (native Apple Silicon)” când adaugi imprimanta din nou.
 
 Revenire la driverul Ricoh: `sudo ./uninstall.sh`
+
+### Linux
+Același filtru se compilează și pe Linux. Comenzile sunt în [secțiunea în engleză](#linux).
 
 ### Ce e suportat
 - Toate formatele de hârtie din PPD, 600 dpi și 1200×600 dpi
