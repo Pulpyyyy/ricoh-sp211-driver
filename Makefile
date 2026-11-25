@@ -7,19 +7,25 @@ STATUS   = src/sp211_status.c src/sp211_usb.c
 STATUS_H = src/sp211_status.h src/sp211_usb.h
 CORE    = src/lilo2.c $(JBIG)/jbig.c $(JBIG)/jbig_ar.c
 # macOS: universal binary, CUPS from the system.
-# Linux: needs the CUPS development files (Debian/Ubuntu: libcups2-dev).
+# Linux: needs the CUPS development files (Debian/Ubuntu: libcups2-dev). With libusb-1.0
+# (libusb-1.0-0-dev) the filter also reads the printer's page and misfeed counters; without it,
+# it builds and prints all the same.
 ifeq ($(shell uname -s),Darwin)
 ARCH    = -arch arm64 -arch x86_64 -mmacosx-version-min=12.0
 LDLIBS  = -lcups
 else
 CUPSFLAGS = $(shell cups-config --cflags 2>/dev/null)
 LDLIBS  = $(shell cups-config --libs 2>/dev/null || echo -lcups)
+ifeq ($(shell pkg-config --exists libusb-1.0 2>/dev/null && echo yes),yes)
+USBFLAGS = -DHAVE_LIBUSB $(shell pkg-config --cflags libusb-1.0)
+USBLIBS  = $(shell pkg-config --libs libusb-1.0)
 endif
-CFLAGS  = -O2 -Wall -Wno-deprecated-declarations -Isrc -I$(JBIG) $(ARCH) $(CUPSFLAGS)
+endif
+CFLAGS  = -O2 -Wall -Wno-deprecated-declarations -Isrc -I$(JBIG) $(ARCH) $(CUPSFLAGS) $(USBFLAGS)
 
-build/rastertosp211: src/rastertosp211.c src/lilo2.h src/dither_matrix.h $(CORE)
+build/rastertosp211: src/rastertosp211.c src/lilo2.h src/dither_matrix.h $(CORE) $(STATUS) $(STATUS_H)
 	mkdir -p build
-	$(CC) $(CFLAGS) -o $@ src/rastertosp211.c $(CORE) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ src/rastertosp211.c $(CORE) $(STATUS) $(LDLIBS) $(USBLIBS)
 
 # Decodes a print stream and reports, for each page, its size and the share of black dots.
 # Plain C, no CUPS: builds on macOS and Linux.

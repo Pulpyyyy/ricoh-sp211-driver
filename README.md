@@ -91,15 +91,28 @@ switches the printer queue to the new filter. The driver also shows up as
 Back to Ricoh's driver: `sudo ./uninstall.sh`
 
 ### Linux
-The same filter builds on Linux (Debian or Ubuntu shown):
+The same filter builds on Linux and also tells CUPS what the printer says about itself. Tested on
+one printer (SP 211, firmware V1.06) with Debian 13 and CUPS 2.4.
 ```bash
-sudo apt install build-essential libcups2-dev
-make
+sudo apt install build-essential libcups2-dev libusb-1.0-0-dev
+make && make test-status
 sudo make install-linux
 sudo lpadmin -p SP211 -E -v "$(lpinfo -v | grep -i 'usb://RICOH' | cut -d' ' -f2)" -P /usr/share/cups/model/ricoh-sp211.ppd
 ```
 `make install-linux` copies the filter and the PPD to the CUPS directories; `lpadmin` then creates
-the queue `SP211` for the printer on USB.
+the queue `SP211` for the printer on USB. Without `libusb-1.0-0-dev` the filter still builds and
+prints; it then does not report the page and misfeed counters.
+
+| Information | Where CUPS shows it | State |
+|---|---|---|
+| toner level | `marker-levels`, and `toner-low-warning` at 10 % or less | verified |
+| out of paper | `media-empty-error` | replayed packets only |
+| page counter and misfeeds | `marker-message`, e.g. `page-counter=193;misfeeds=6;misfeeds-tray1=6` | dry run only, not yet with a real job |
+| pages printed by a job | job accounting (`job-impressions-completed`) | dry run only, not yet with a real job |
+
+Cover open and paper jams are not reported: the printer does not transmit them.
+`tools/ricoh_gdi_status.py` reads the printer directly. The protocol is described in
+`docs/STATUS_PROTOCOL.md`.
 
 ### What is supported
 - All paper sizes in the PPD, 600 dpi and 1200×600 dpi
@@ -133,8 +146,8 @@ driver's output (`src/dither_matrix.h`).
   without Rosetta
 - `tools/lilo2check.c`: decodes a print stream and reports, for each page, its size and the
   share of black dots (`make build/lilo2check`, then `build/lilo2check FILE`)
-- `docs/STATUS_PROTOCOL.md`: how the printer reports toner, paper and its page counter over USB
-  (not used by the driver yet)
+- `docs/STATUS_PROTOCOL.md`: how the printer reports toner, paper and its page counter over USB;
+  `src/sp211_status.c`, `src/sp211_usb.c`: the code that reads it (see [Linux](#linux))
 
 ### License
 Copyright (C) 2026 Alexandru Hrisca.
@@ -247,7 +260,9 @@ setează coada imprimantei să folosească filtrul nou. Driverul apare și ca
 Revenire la driverul Ricoh: `sudo ./uninstall.sh`
 
 ### Linux
-Același filtru se compilează și pe Linux. Comenzile sunt în [secțiunea în engleză](#linux).
+Același filtru se compilează și pe Linux, unde raportează către CUPS și starea imprimantei: nivelul
+tonerului, lipsa hârtiei, contorul de pagini. Testat pe o singură imprimantă (SP 211, firmware
+V1.06), cu Debian 13 și CUPS 2.4. Comenzile și detaliile sunt în [secțiunea în engleză](#linux).
 
 ### Ce e suportat
 - Toate formatele de hârtie din PPD, 600 dpi și 1200×600 dpi
@@ -282,8 +297,8 @@ din ieșirea driverului original (`src/dither_matrix.h`).
   care funcționează și fără Rosetta.
 - `tools/lilo2check.c`: decodează un flux de imprimare și afișează, pentru fiecare pagină,
   dimensiunea și proporția de puncte negre (`make build/lilo2check`, apoi `build/lilo2check FILE`)
-- `docs/STATUS_PROTOCOL.md`: cum raportează imprimanta tonerul, hârtia și contorul de pagini prin USB
-  (încă nefolosit de driver)
+- `docs/STATUS_PROTOCOL.md`: cum raportează imprimanta tonerul, hârtia și contorul de pagini prin USB;
+  `src/sp211_status.c`, `src/sp211_usb.c`: codul care le citește (vezi [Linux](#linux))
 
 ### Licență
 Copyright (C) 2026 Alexandru Hrisca.

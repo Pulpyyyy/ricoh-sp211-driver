@@ -1,8 +1,9 @@
 # Ricoh GDI status protocol (GDIC / GDIR)
 
 How the Ricoh SP 211 reports its state over USB: toner level, paper, page
-and misfeed counters. Nothing in this repository uses it yet; the driver and
-the AirPrint server only send print data.
+and misfeed counters. On Linux the CUPS filter uses it (`src/sp211_status.c`,
+`src/sp211_usb.c`), and `tools/ricoh_gdi_status.py` reads it directly; the
+AirPrint server only sends print data.
 
 **Scope.** Everything here was observed on one printer: Ricoh SP 211,
 USB `05ca:0450`, firmware V1.06. The SP 210 shares the Windows driver and

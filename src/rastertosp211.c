@@ -12,11 +12,17 @@
  * Usage (as a CUPS filter): rastertosp211 job user title copies options [file]
  *
  * MODIFIED (GPL v2 section 2a notice):
- * 2026-11-25: options the job does not set are taken from the queue's PPD.
+ * 2026-11-25: options the job does not set are taken from the queue's PPD;
+ * the printer's status packets are read from the CUPS back-channel and
+ * reported to CUPS (toner, out of paper); the filter stays until the printer
+ * has finished the job; the printer's page and misfeed counters are read
+ * over USB and reported, with the number of pages actually printed.
  */
 
+#include <cups/backend.h>
 #include <cups/cups.h>
 #include <cups/ppd.h>
+#include <cups/sidechannel.h>
 #include <cups/raster.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -24,10 +30,117 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "lilo2.h"
+#include "sp211_status.h"
+#include "sp211_usb.h"
+
+/* ---- printer status from the CUPS back-channel ---------------------------
+ * CUPS gives a filter the printer's replies on file descriptor 3. The printer
+ * sends a GDIR status packet every few seconds while it holds a job. Run by
+ * hand (no back-channel) the filter behaves exactly as before. */
+#define BACKCHANNEL_FD 3
+
+#define POWER_PROBE_SECONDS 5
+
+static int status_enabled;
+static sp211_stream status_stream;
+static sp211_reporter status_reporter;
+static sp211_status status_last;
+static int status_have, status_seen_active;
+
+/* Lifetime counters read from the printer before the job; the difference
+ * with the value after the job is the number of pages that really came out. */
+static sp211_counters counters_before;
+static int counters_have_before;
+
+static double now_seconds(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+static void status_on_packet(const sp211_status *st, void *arg) {
+  (void)arg;
+  status_last = *st;
+  status_have = 1;
+  if (st->jobs_pending) status_seen_active = 1;
+  sp211_report(&status_reporter, st);
+}
+
+/* Reads the counters before the job, once. Fails while the printer is
+ * switched off; it is then tried again when the printer starts answering. */
+static void counters_read_before(void) {
+  if (counters_have_before) return;
+  if (sp211_usb_read_counters(getenv("DEVICE_URI"), 0, &counters_before)) {
+    counters_have_before = 1;
+    sp211_report_counters(&status_reporter, &counters_before);
+  }
+}
+
+static void status_init(void) {
+  struct stat sb;
+  /* only a pipe or socket is a back-channel; anything else is not ours */
+  if (fstat(BACKCHANNEL_FD, &sb) == 0 && (S_ISFIFO(sb.st_mode) || S_ISSOCK(sb.st_mode))) {
+    status_enabled = 1;
+    sp211_reporter_init(&status_reporter, stderr);
+    counters_read_before();
+  }
+}
+
+/* Reads what the printer sent, waiting at most timeout seconds.
+ * Returns 1 if any data arrived. */
+static int status_poll(double timeout) {
+  unsigned char buf[1024];
+  if (!status_enabled) return 0;
+  ssize_t n = cupsBackChannelRead((char *)buf, sizeof buf, timeout);
+  if (n <= 0) return 0;
+  counters_read_before(); /* the printer is on now */
+  sp211_stream_feed(&status_stream, buf, (size_t)n, status_on_packet, NULL);
+  return 1;
+}
+
+/* All data is sent: stay until the printer has finished the job, so that a
+ * paper error keeps the CUPS job (and its state) visible and the counter
+ * read at the end is final. Then hand the counters and the number of pages
+ * that really came out to CUPS. */
+static void status_wait_for_printer(void) {
+  if (!status_enabled) return;
+  double start = now_seconds(), last_data = start, next_probe = 0;
+  int heard = status_have;
+  for (;;) {
+    if (status_poll(1.0)) {
+      last_data = now_seconds();
+      if (!heard) { heard = 1; start = last_data; }
+    }
+    double now = now_seconds();
+    /* Never heard from the printer and it cannot be reached: it is switched
+     * off and the CUPS backend is waiting for it. Wait too (CUPS stops the
+     * filter if the job is cancelled) and start timing once it is on. */
+    int waiting_for_power = 0;
+    if (!heard && !counters_have_before) {
+      if (now >= next_probe) {
+        next_probe = now + POWER_PROBE_SECONDS;
+        counters_read_before();
+      }
+      if (counters_have_before) start = last_data = now;
+      else waiting_for_power = 1;
+    }
+    if (!sp211_keep_waiting(now - start, now - last_data, status_have ? &status_last : NULL,
+                            status_seen_active, waiting_for_power))
+      break;
+  }
+
+  sp211_counters after;
+  if (sp211_usb_read_counters(getenv("DEVICE_URI"), 1, &after)) {
+    sp211_report_counters(&status_reporter, &after);
+    if (counters_have_before)
+      sp211_report_pages(&status_reporter, sp211_pages_printed(&counters_before, &after));
+  }
+}
 
 static void write_all(const void *p, size_t n) {
   const unsigned char *c = p;
@@ -36,6 +149,7 @@ static void write_all(const void *p, size_t n) {
     if (w <= 0) { perror("ERROR: write"); exit(1); }
     c += w; n -= (size_t)w;
   }
+  status_poll(0.0);
 }
 
 /* the original filter only accepts "true" (any case) */
@@ -107,6 +221,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   signal(SIGPIPE, SIG_IGN);
+  status_init();
 
   int fd = 0;
   if (argc == 7 && (fd = open(argv[6], O_RDONLY)) < 0) {
@@ -204,5 +319,6 @@ int main(int argc, char *argv[]) {
   }
   cupsRasterClose(ras);
   if (fd) close(fd);
+  if (header_done) status_wait_for_printer();
   return npages ? 0 : 1;
 }
