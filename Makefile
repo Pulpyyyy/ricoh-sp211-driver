@@ -2,6 +2,9 @@
 # Copyright (C) 2026 Alexandru Hrisca
 # Native (Apple Silicon + Intel) CUPS filter and AirPrint server for Ricoh SP 211 / SP 221 class printers
 JBIG    = third_party/jbigkit-2.2/libjbig
+# Printer status (toner, paper, counters)
+STATUS   = src/sp211_status.c src/sp211_usb.c
+STATUS_H = src/sp211_status.h src/sp211_usb.h
 CORE    = src/lilo2.c $(JBIG)/jbig.c $(JBIG)/jbig_ar.c
 # macOS: universal binary, CUPS from the system.
 # Linux: needs the CUPS development files (Debian/Ubuntu: libcups2-dev).
@@ -75,6 +78,15 @@ build/router/sp211-airprint-router.tar.gz: build/router/sp211-airprintd packagin
 	tar -C build/router/bundle -czf $@ .
 
 router: build/router/sp211-airprint-router.tar.gz
+
+# Unit tests of the status code: no printer, no CUPS, no libusb.
+build/test_status: tests/test_status.c $(STATUS) $(STATUS_H)
+	mkdir -p build
+	$(CC) -O2 -Wall -Isrc -o $@ tests/test_status.c $(STATUS)
+
+test-status: build/test_status
+	./build/test_status
+.PHONY: test-status
 
 # Regenerates src/icon_png.h (with its license header) from src/icon.png.
 # Run by hand after changing the icon; the header file is checked in.
