@@ -183,19 +183,8 @@ static void test_counters(void) {
   CHECK(!sp211_decode_register1(reg1, 63, &alt));
   CHECK(!sp211_decode_misfeeds(reg1, 64, &alt));
 
-  char text[96];
-  CHECK(sp211_counters_message(&c, text, sizeof text) > 0);
-  CHECK(!strcmp(text, "page-counter=184;misfeeds=6;misfeeds-tray1=6"));
-  CHECK(strchr(text, ' ') == NULL);
-  sp211_counters only_pages;
-  sp211_counters_init(&only_pages);
-  only_pages.have_pages = 1;
-  only_pages.page_counter = 5;
-  sp211_counters_message(&only_pages, text, sizeof text);
-  CHECK(!strcmp(text, "page-counter=5"));
   sp211_counters none;
   sp211_counters_init(&none);
-  CHECK(sp211_counters_message(&none, text, sizeof text) == 0 && text[0] == '\0');
 
   sp211_counters after = c;
   after.page_counter = 187;
@@ -219,7 +208,8 @@ static void test_reporter_counters(void) {
   sp211_decode_register1(reg1, 64, &c);
 
   sp211_report_counters(&r, &c);                        /* toner comes from the register */
-  CHECK(strstr(text, "marker-levels=75 marker-message=page-counter=184\n") != NULL);
+  CHECK(strstr(text, "marker-levels=75\n") != NULL);
+  CHECK(strstr(text, "marker-message") == NULL);        /* counters are not reported */
   size_t first = strlen(text);
   sp211_report_counters(&r, &c);                        /* unchanged: nothing */
   CHECK(strlen(text) == first);
@@ -231,8 +221,9 @@ static void test_reporter_counters(void) {
 
   sp211_decode_misfeeds(reg27, 64, &c);
   c.page_counter = 185;
-  sp211_report_counters(&r, &c);
-  CHECK(strstr(text, "marker-message=page-counter=185;misfeeds=6;misfeeds-tray1=6\n") != NULL);
+  size_t before = strlen(text);
+  sp211_report_counters(&r, &c);                        /* counters changed: nothing */
+  CHECK(strlen(text) == before);
 
   sp211_report_pages(&r, 0);
   CHECK(strstr(text, "PAGE:") == NULL);

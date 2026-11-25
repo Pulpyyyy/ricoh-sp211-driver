@@ -72,12 +72,6 @@ int sp211_decode_register1(const unsigned char *reg, size_t n, sp211_counters *c
 int sp211_decode_register3(const unsigned char *reg, size_t n, sp211_counters *c);
 int sp211_decode_misfeeds(const unsigned char *reg, size_t n, sp211_counters *c);
 
-/* Text for the CUPS "marker-message" attribute, for example
- * "page-counter=193;misfeeds=6;misfeeds-tray1=6". CUPS has no attribute for a
- * lifetime counter and this is the only free-text field a filter can set.
- * Returns the length written (0 if nothing is known). */
-size_t sp211_counters_message(const sp211_counters *c, char *buf, size_t bufsize);
-
 /* Pages that physically came out during a job, from the counter before and
  * after it. 0 if unknown or implausible. */
 unsigned sp211_pages_printed(const sp211_counters *before, const sp211_counters *after);
@@ -88,14 +82,15 @@ typedef struct {
   int toner;     /* last known, -1 = none yet */
   int toner_low; /* -1 = none yet */
   int paper_out; /* -1 = none yet */
-  char message[96];      /* last known counters text */
-  int sent_toner;        /* what the last ATTR line carried */
-  char sent_message[96];
+  int sent_toner; /* what the last ATTR line carried */
 } sp211_reporter;
 
 void sp211_reporter_init(sp211_reporter *r, FILE *out);
 void sp211_report(sp211_reporter *r, const sp211_status *st);
-/* Counters (and the toner level, if not known yet) from the registers. */
+/* Toner level from the registers, if no status packet gave one yet. The page
+ * and misfeed counters are not reported: a CUPS filter may only set the
+ * marker-* and printer-alert attributes (filter(7)), and none of them is
+ * meant for a counter. They serve to count the pages of a job, below. */
 void sp211_report_counters(sp211_reporter *r, const sp211_counters *c);
 /* Job accounting: "PAGE: total N". Nothing if pages is 0. */
 void sp211_report_pages(sp211_reporter *r, unsigned pages);
