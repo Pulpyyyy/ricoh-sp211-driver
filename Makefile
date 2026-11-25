@@ -41,13 +41,14 @@ dmg:
 
 # Linux: installs the filter and the PPD where CUPS looks for them. The PPD in ppd/ names the
 # filter by its macOS path; the installed copy names it alone, and CUPS finds it in its filter
-# directory. On macOS use install.sh or the disk image instead.
+# directory. The model name loses its "Apple Silicon" mention, which is what CUPS shows and
+# announces on the network. On macOS use install.sh or the disk image instead.
 CUPS_SERVERBIN ?= $(shell cups-config --serverbin 2>/dev/null || echo /usr/lib/cups)
 CUPS_DATADIR   ?= $(shell cups-config --datadir 2>/dev/null || echo /usr/share/cups)
 install-linux: build/rastertosp211
 	install -d $(DESTDIR)$(CUPS_SERVERBIN)/filter $(DESTDIR)$(CUPS_DATADIR)/model
 	install -m 755 build/rastertosp211 $(DESTDIR)$(CUPS_SERVERBIN)/filter/rastertosp211
-	sed 's|/Library/Printers/SP211Native/Filters/rastertosp211|rastertosp211|' ppd/RICOH-SP-211-native.ppd > $(DESTDIR)$(CUPS_DATADIR)/model/ricoh-sp211.ppd
+	sed -e 's|/Library/Printers/SP211Native/Filters/rastertosp211|rastertosp211|' -e 's| (native Apple Silicon)| (native)|' -e 's| (Apple Silicon, no Rosetta required)||' ppd/RICOH-SP-211-native.ppd > $(DESTDIR)$(CUPS_DATADIR)/model/ricoh-sp211.ppd
 	chmod 644 $(DESTDIR)$(CUPS_DATADIR)/model/ricoh-sp211.ppd
 .PHONY: install-linux
 
