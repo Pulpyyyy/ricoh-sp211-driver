@@ -78,20 +78,6 @@ int sp211_decode_misfeeds(const unsigned char *reg, size_t n, sp211_counters *c)
   return 1;
 }
 
-size_t sp211_counters_message(const sp211_counters *c, char *buf, size_t bufsize) {
-  size_t len = 0;
-  if (!bufsize) return 0;
-  buf[0] = '\0';
-  if (c->have_pages)
-    len += (size_t)snprintf(buf + len, bufsize - len, "page-counter=%lu",
-                            (unsigned long)c->page_counter);
-  if (c->have_misfeeds && len < bufsize)
-    len += (size_t)snprintf(buf + len, bufsize - len, "%smisfeeds=%lu;misfeeds-tray1=%lu",
-                            len ? ";" : "", (unsigned long)c->misfeed_total,
-                            (unsigned long)c->misfeed_tray1);
-  return len < bufsize ? len : bufsize - 1;
-}
-
 unsigned sp211_pages_printed(const sp211_counters *before, const sp211_counters *after) {
   if (!before || !after || !before->have_pages || !after->have_pages) return 0;
   if (after->page_counter <= before->page_counter) return 0;
@@ -106,18 +92,15 @@ void sp211_reporter_init(sp211_reporter *r, FILE *out) {
 }
 
 /* One ATTR line carries the whole marker set; send it when the toner level
- * or the counters text changed. */
+ * changed. */
 static void report_supplies(sp211_reporter *r) {
   if (r->toner < 0) return;
-  if (r->toner == r->sent_toner && !strcmp(r->message, r->sent_message)) return;
+  if (r->toner == r->sent_toner) return;
   r->sent_toner = r->toner;
-  strcpy(r->sent_message, r->message);
   fprintf(r->out,
           "ATTR: marker-colors=#000000 marker-names='Black Toner' marker-types=toner "
-          "marker-low-levels=%d marker-high-levels=100 marker-levels=%d",
+          "marker-low-levels=%d marker-high-levels=100 marker-levels=%d\n",
           SP211_TONER_LOW_PERCENT, r->toner);
-  if (r->message[0]) fprintf(r->out, " marker-message=%s", r->message);
-  fputc('\n', r->out);
   int low = r->toner <= SP211_TONER_LOW_PERCENT;
   if (low != r->toner_low) {
     r->toner_low = low;
@@ -142,10 +125,8 @@ void sp211_report(sp211_reporter *r, const sp211_status *st) {
 }
 
 void sp211_report_counters(sp211_reporter *r, const sp211_counters *c) {
-  char text[sizeof r->message];
   if (!c) return;
   if (r->toner < 0 && c->toner_percent >= 0) r->toner = c->toner_percent;
-  if (sp211_counters_message(c, text, sizeof text)) strcpy(r->message, text);
   report_supplies(r);
   fflush(r->out);
 }
